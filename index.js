@@ -125,76 +125,85 @@ client.once(Events.ClientReady, () => {
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isButton()) return;
 
-    const userId = interaction.user.id;
-    const member = interaction.member;
-    const hasRole = member && member.roles.cache.has(NOTIFICATION_ROLE_ID);
-    const isSubscribed = subscriptions[userId];
+    try {
+        const userId = interaction.user.id;
+        const member = interaction.member;
+        const hasRole = member && member.roles.cache.has(NOTIFICATION_ROLE_ID);
+        const isSubscribed = subscriptions[userId];
 
-    if (interaction.customId === 'subscribe') {
-        // Подписка
-        if (hasRole || isSubscribed) {
-            await interaction.reply({ 
-                content: '❌ Вы уже подписаны на рассылку!', 
-                ephemeral: true 
-            });
-        } else {
-            // Подписываемся
-            subscriptions[userId] = true;
-            if (member && NOTIFICATION_ROLE_ID) {
-                try {
-                    await member.roles.add(NOTIFICATION_ROLE_ID);
-                } catch (error) {
-                    console.log('Ошибка при выдаче роли:', error);
+        if (interaction.customId === 'subscribe') {
+            // Подписка
+            if (hasRole || isSubscribed) {
+                await interaction.reply({ 
+                    content: '❌ Вы уже подписаны на рассылку!', 
+                    ephemeral: true 
+                });
+            } else {
+                // Подписываемся
+                subscriptions[userId] = true;
+                if (member && NOTIFICATION_ROLE_ID) {
+                    try {
+                        await member.roles.add(NOTIFICATION_ROLE_ID);
+                    } catch (error) {
+                        console.log('Ошибка при выдаче роли:', error);
+                    }
                 }
+                saveSubs();
+                
+                await interaction.reply({ 
+                    content: '✅ Вы успешно подписались на уведомления! Теперь вы будете получать важные сообщения в ЛС.', 
+                    ephemeral: true 
+                });
             }
-            saveSubs();
-            
-            await interaction.reply({ 
-                content: '✅ Вы успешно подписались на уведомления! Теперь вы будете получать важные сообщения в ЛС.', 
-                ephemeral: true 
-            });
-        }
-    }
-    
-    if (interaction.customId === 'unsubscribe') {
-        // Отписка
-        if (!hasRole && !isSubscribed) {
-            await interaction.reply({ 
-                content: '❌ Вы не подписаны на рассылку!', 
-                ephemeral: true 
-            });
-        } else {
-            // Отписываемся
-            delete subscriptions[userId];
-            if (member && NOTIFICATION_ROLE_ID) {
-                try {
-                    await member.roles.remove(NOTIFICATION_ROLE_ID);
-                } catch (error) {
-                    console.log('Ошибка при удалении роли:', error);
-                }
-            }
-            saveSubs();
-            
-            await interaction.reply({ 
-                content: '✅ Вы отписались от уведомлений.', 
-                ephemeral: true 
-            });
-        }
-    }
-    
-    if (interaction.customId === 'send_broadcast') {
-        // Проверяем права пользователя
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return await interaction.reply({ 
-                content: '❌ Эта функция доступна только для медиа-команды!', 
-                ephemeral: true 
-            });
         }
         
-        await interaction.reply({ 
-            content: '📝 Теперь отправьте сообщение в этот канал (текст или с изображением), и оно будет разослано всем подписчикам.', 
-            ephemeral: true 
-        });
+        if (interaction.customId === 'unsubscribe') {
+            // Отписка
+            if (!hasRole && !isSubscribed) {
+                await interaction.reply({ 
+                    content: '❌ Вы не подписаны на рассылку!', 
+                    ephemeral: true 
+                });
+            } else {
+                // Отписываемся
+                delete subscriptions[userId];
+                if (member && NOTIFICATION_ROLE_ID) {
+                    try {
+                        await member.roles.remove(NOTIFICATION_ROLE_ID);
+                    } catch (error) {
+                        console.log('Ошибка при удалении роли:', error);
+                    }
+                }
+                saveSubs();
+                
+                await interaction.reply({ 
+                    content: '✅ Вы отписались от уведомлений.', 
+                    ephemeral: true 
+                });
+            }
+        }
+        
+        if (interaction.customId === 'send_broadcast') {
+            // Проверяем права пользователя
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                return await interaction.reply({ 
+                    content: '❌ Эта функция доступна только для медиа-команды!', 
+                    ephemeral: true 
+                });
+            }
+            
+            await interaction.reply({ 
+                content: '📝 Теперь отправьте сообщение в этот канал (текст или с изображением), и оно будет разослано всем подписчикам.', 
+                ephemeral: true 
+            });
+        }
+    } catch (error) {
+        // ИГНОРИРУЕМ ошибку "Unknown interaction" - это нормально при перезапусках
+        if (error.code === 10062) {
+            console.log('Игнорируем устаревшее взаимодействие');
+            return;
+        }
+        console.log('Ошибка при обработке взаимодействия:', error);
     }
 });
 
@@ -216,7 +225,23 @@ client.on(Events.MessageCreate, async message => {
         
         if (botMessage && message.createdTimestamp > botMessage.createdTimestamp) {
             // Это ответ на запрос рассылки
-            const subscribedUsers = Object.keys(subscriptions);
+            
+            // НАЙДИ ВСЕХ УЧАСТНИКОВ С РОЛЬЮ
+            const guild = message.guild;
+            let membersWithRole = [];
+            
+            try {
+                // Получаем всех участников с ролью уведомлений
+                membersWithRole = await guild.members.fetch();
+                membersWithRole = membersWithRole.filter(member => 
+                    member.roles.cache.has(NOTIFICATION_ROLE_ID)
+                );
+                console.log(`Найдено ${membersWithRole.size} пользователей с ролью уведомлений`);
+            } catch (error) {
+                console.log('Ошибка при получении участников:', error);
+                return;
+            }
+            
             let successCount = 0;
             let failCount = 0;
             
@@ -233,31 +258,36 @@ client.on(Events.MessageCreate, async message => {
                 broadcastEmbed.setImage(message.attachments.first().url);
             }
             
-            // Рассылаем всем подписчикам
-            for (const userId of subscribedUsers) {
+            // Рассылаем ВСЕМ с ролью
+            for (const member of membersWithRole.values()) {
                 try {
-                    const user = await client.users.fetch(userId);
+                    // Проверяем чтобы не слать боту
+                    if (member.user.bot) continue;
+                    
+                    const user = await client.users.fetch(member.id);
                     await user.send({ embeds: [broadcastEmbed] });
                     successCount++;
+                    console.log(`Успешно отправлено пользователю: ${member.user.tag}`);
                 } catch (err) {
-                    console.log(`Не удалось отправить сообщение ${userId}: ${err}`);
+                    console.log(`Не удалось отправить сообщение ${member.user.tag}: ${err}`);
                     failCount++;
                 }
             }
             
             // Отправляем отчет о рассылке
             const reportEmbed = new EmbedBuilder()
-                .setColor(0x00FF00)
+                .setColor(successCount > 0 ? 0x00FF00 : 0xFF0000)
                 .setTitle('📊 Отчет о рассылке')
-                .setDescription(`Рассылка успешно отправлена!`)
+                .setDescription(`Рассылка завершена!`)
                 .addFields(
                     { name: '✅ Успешно:', value: `${successCount} пользователей`, inline: true },
                     { name: '❌ Ошибки:', value: `${failCount} пользователей`, inline: true },
-                    { name: '📝 Итого:', value: `${subscribedUsers.length} подписчиков`, inline: true }
+                    { name: '👥 Всего с ролью:', value: `${membersWithRole.size} пользователей`, inline: true }
                 )
                 .setTimestamp();
             
             await message.reply({ embeds: [reportEmbed] });
+            console.log(`Рассылка завершена: ${successCount}/${membersWithRole.size} успешно`);
         }
     }
 });
