@@ -7,7 +7,8 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages
     ]
 });
 
@@ -35,7 +36,7 @@ function createNotificationEmbed() {
         .setDescription('**Не пропустите важные объявления и события!**\n\nПодпишитесь на уведомления, чтобы получать важные сообщения прямо в личные сообщения.')
         .addFields(
             { name: '📬 Что вы получите:', value: '• Важные объявления\n• Новости проекта\n• Эксклюзивные события\n• Срочные уведомления' },
-            { name: '⚡ Как это работает:', value: 'Нажмите кнопку ниже чтобы подписаться/отписаться' }
+            { name: '⚡ Как это работает:', value: 'Используйте кнопки ниже для управления подпиской' }
         )
         .setImage('attachment://freak_mods.png')
         .setFooter({ text: 'Freak Mods • Ваш надежный компаньон', iconURL: 'https://i.imgur.com/xV6e6aM.png' })
@@ -78,13 +79,17 @@ client.once(Events.ClientReady, () => {
             const botMediaMessages = mediaMessages.filter(msg => msg.author.id === client.user.id);
             await mediaChannel.bulkDelete(botMediaMessages);
             
-            // Создаем сообщение в канале уведомлений
+            // Создаем сообщение в канале уведомлений с двумя кнопками
             const notificationRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        .setCustomId('toggle_notifications')
-                        .setLabel('🔔 Включить уведомления')
-                        .setStyle(ButtonStyle.Primary)
+                        .setCustomId('subscribe')
+                        .setLabel('✅ Подписаться')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('unsubscribe')
+                        .setLabel('❌ Отписаться')
+                        .setStyle(ButtonStyle.Danger)
                 );
             
             const image = new AttachmentBuilder('./freak_mods.png');
@@ -120,37 +125,18 @@ client.once(Events.ClientReady, () => {
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isButton()) return;
 
-    if (interaction.customId === 'toggle_notifications') {
-        const userId = interaction.user.id;
-        const member = interaction.member;
-        
-        if (subscriptions[userId]) {
-            // Отписываемся
-            delete subscriptions[userId];
-            if (member && NOTIFICATION_ROLE_ID) {
-                try {
-                    await member.roles.remove(NOTIFICATION_ROLE_ID);
-                } catch (error) {
-                    console.log('Ошибка при удалении роли:', error);
-                }
-            }
-            saveSubs();
-            
-            // Обновляем кнопку
-            const updatedRow = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('toggle_notifications')
-                        .setLabel('🔔 Включить уведомления')
-                        .setStyle(ButtonStyle.Primary)
-                );
-            
-            await interaction.update({ components: [updatedRow] });
-            await interaction.followUp({ 
-                content: '❌ Вы отписались от уведомлений', 
+    const userId = interaction.user.id;
+    const member = interaction.member;
+    const hasRole = member && member.roles.cache.has(NOTIFICATION_ROLE_ID);
+    const isSubscribed = subscriptions[userId];
+
+    if (interaction.customId === 'subscribe') {
+        // Подписка
+        if (hasRole || isSubscribed) {
+            await interaction.reply({ 
+                content: '❌ Вы уже подписаны на рассылку!', 
                 ephemeral: true 
             });
-            
         } else {
             // Подписываемся
             subscriptions[userId] = true;
@@ -163,18 +149,34 @@ client.on(Events.InteractionCreate, async interaction => {
             }
             saveSubs();
             
-            // Обновляем кнопку
-            const updatedRow = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('toggle_notifications')
-                        .setLabel('🔕 Отключить уведомления')
-                        .setStyle(ButtonStyle.Secondary)
-                );
+            await interaction.reply({ 
+                content: '✅ Вы успешно подписались на уведомления! Теперь вы будете получать важные сообщения в ЛС.', 
+                ephemeral: true 
+            });
+        }
+    }
+    
+    if (interaction.customId === 'unsubscribe') {
+        // Отписка
+        if (!hasRole && !isSubscribed) {
+            await interaction.reply({ 
+                content: '❌ Вы не подписаны на рассылку!', 
+                ephemeral: true 
+            });
+        } else {
+            // Отписываемся
+            delete subscriptions[userId];
+            if (member && NOTIFICATION_ROLE_ID) {
+                try {
+                    await member.roles.remove(NOTIFICATION_ROLE_ID);
+                } catch (error) {
+                    console.log('Ошибка при удалении роли:', error);
+                }
+            }
+            saveSubs();
             
-            await interaction.update({ components: [updatedRow] });
-            await interaction.followUp({ 
-                content: '✅ Вы подписались на уведомления! Теперь вы будете получать важные сообщения в ЛС.', 
+            await interaction.reply({ 
+                content: '✅ Вы отписались от уведомлений.', 
                 ephemeral: true 
             });
         }
