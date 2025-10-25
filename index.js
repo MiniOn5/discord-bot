@@ -19,6 +19,7 @@ const NOTIFICATION_ROLE_ID = "1431416078310834206";
 
 let subscriptions = {};
 const subsFile = './subs.json';
+let isInitialized = false; // Флаг чтобы предотвратить дублирование
 
 if (fs.existsSync(subsFile)) {
     subscriptions = JSON.parse(fs.readFileSync(subsFile));
@@ -64,20 +65,45 @@ function createMediaEmbed() {
 client.once(Events.ClientReady, () => {
     console.log(`Бот онлайн: ${client.user.tag}`);
     
+    if (isInitialized) {
+        console.log('Бот уже инициализирован, пропускаем создание сообщений');
+        return;
+    }
+    
+    isInitialized = true;
+    
     // Автоматически создаем сообщения в каналах при запуске
     setTimeout(async () => {
         try {
             const notificationChannel = await client.channels.fetch(NOTIFICATION_CHANNEL_ID);
             const mediaChannel = await client.channels.fetch(MEDIA_CHANNEL_ID);
             
-            // Очищаем предыдущие сообщения бота в этих каналах
-            const messages = await notificationChannel.messages.fetch({ limit: 10 });
-            const botMessages = messages.filter(msg => msg.author.id === client.user.id);
-            await notificationChannel.bulkDelete(botMessages);
+            // Проверяем есть ли уже сообщения от бота
+            const notificationMessages = await notificationChannel.messages.fetch({ limit: 5 });
+            const existingNotification = notificationMessages.find(msg => 
+                msg.author.id === client.user.id && 
+                msg.embeds.length > 0
+            );
             
-            const mediaMessages = await mediaChannel.messages.fetch({ limit: 10 });
-            const botMediaMessages = mediaMessages.filter(msg => msg.author.id === client.user.id);
-            await mediaChannel.bulkDelete(botMediaMessages);
+            const mediaMessages = await mediaChannel.messages.fetch({ limit: 5 });
+            const existingMedia = mediaMessages.find(msg => 
+                msg.author.id === client.user.id && 
+                msg.embeds.length > 0
+            );
+            
+            // Если сообщения уже есть - не создаем новые
+            if (existingNotification && existingMedia) {
+                console.log('Сообщения уже существуют, пропускаем создание');
+                return;
+            }
+            
+            // Очищаем только если нужно создать новые
+            if (existingNotification) {
+                await existingNotification.delete();
+            }
+            if (existingMedia) {
+                await existingMedia.delete();
+            }
             
             // Создаем сообщение в канале уведомлений с двумя кнопками
             const notificationRow = new ActionRowBuilder()
@@ -208,6 +234,8 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // Обработка сообщений в медиа-канале для рассылки
+let lastBroadcastTime = 0; // Защита от дублирования рассылок
+
 client.on(Events.MessageCreate, async message => {
     // Рассылка уведомлений подписчикам
     if (message.channel.id === MEDIA_CHANNEL_ID && !message.author.bot) {
@@ -215,6 +243,14 @@ client.on(Events.MessageCreate, async message => {
         if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             return; // Не админ - игнорируем
         }
+        
+        // Защита от дублирования - не чаще чем раз в 10 секунд
+        const now = Date.now();
+        if (now - lastBroadcastTime < 10000) {
+            console.log('Защита от дублирования - пропускаем рассылку');
+            return;
+        }
+        lastBroadcastTime = now;
         
         // Получаем предыдущее сообщение бота с кнопкой
         const messages = await message.channel.messages.fetch({ limit: 5 });
@@ -234,7 +270,7 @@ client.on(Events.MessageCreate, async message => {
                 // Получаем всех участников с ролью уведомлений
                 membersWithRole = await guild.members.fetch();
                 membersWithRole = membersWithRole.filter(member => 
-                    member.roles.cache.has(NOTIFICATION_ROLE_ID)
+                    member.roles.cache.has(NOTIFICATION_ROLE_ID) && !member.user.bot
                 );
                 console.log(`Найдено ${membersWithRole.size} пользователей с ролью уведомлений`);
             } catch (error) {
@@ -261,9 +297,6 @@ client.on(Events.MessageCreate, async message => {
             // Рассылаем ВСЕМ с ролью
             for (const member of membersWithRole.values()) {
                 try {
-                    // Проверяем чтобы не слать боту
-                    if (member.user.bot) continue;
-                    
                     const user = await client.users.fetch(member.id);
                     await user.send({ embeds: [broadcastEmbed] });
                     successCount++;
