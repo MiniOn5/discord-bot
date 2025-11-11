@@ -40,7 +40,7 @@ const BRAND_PRIMARY_COLOR = (() => {
     return Number.isNaN(parsed) ? 0x2b2d31 : parsed;
 })();
 
-const BRAND_BANNER_URL = process.env.BRAND_BANNER_URL || 'https://imgur.com/a/neFpsVm';
+const BRAND_BANNER_URL = process.env.BRAND_BANNER_URL || 'https://i.imgur.com/LtSCko0.png';
 const BRAND_FOOTER_TEXT = process.env.BRAND_FOOTER_TEXT || 'Freak Mods • Надежный поставщик';
 const BRAND_ICON_URL = process.env.BRAND_FOOTER_ICON_URL || BRAND_BANNER_URL;
 const PRIVATE_PREVIEW_URL = process.env.PRIVATE_PREVIEW_URL || null;
