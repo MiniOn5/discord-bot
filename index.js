@@ -40,63 +40,61 @@ const BRAND_PRIMARY_COLOR = (() => {
     return Number.isNaN(parsed) ? 0x2b2d31 : parsed;
 })();
 
-const BRAND_BANNER_URL = process.env.BRAND_BANNER_URL || 'https://i.imgur.com/neFpsVm.jpg';
+const BRAND_BANNER_URL = process.env.BRAND_BANNER_URL || 'https://imgur.com/a/neFpsVm';
 const BRAND_FOOTER_TEXT = process.env.BRAND_FOOTER_TEXT || 'Freak Mods • Надежный поставщик';
 const BRAND_ICON_URL = process.env.BRAND_FOOTER_ICON_URL || BRAND_BANNER_URL;
 const PRIVATE_PREVIEW_URL = process.env.PRIVATE_PREVIEW_URL || null;
 
 const contactMention = CONTACT_USER_ID ? `<@${CONTACT_USER_ID}>` : CONTACT_USER_TAG;
 const supportChannelMention = SUPPORT_CHANNEL_ID ? `<#${SUPPORT_CHANNEL_ID}>` : 'канале «『💳』тикет-для-заказов»';
-const previewText = PRIVATE_PREVIEW_URL ? `[Открыть превью](${PRIVATE_PREVIEW_URL})` : 'Ссылка появится после настройки';
 
 const products = {
     private: {
         name: '🎮 ПРИВАТНЫЙ КАНАЛ',
         description: 'Эксклюзивный доступ к приватному каналу Freak Mods с регулярными обновлениями контента.',
         features: [
-            '✅ 50+ ганпаков',
-            '✅ 30+ редуксов',
-            '✅ 20+ уникальных сборок',
-            '✅ Ежедневные обновления и техническая поддержка',
-            `✅ Превью: ${previewText}`
+            '✅ 100+ ганпаков',
+            '✅ 100+ редуксов',
+            '✅ 50+ уникальных сборок',
+            '✅ Ежедневные обновления и техническая поддержка'
         ],
         price: '999 ₽',
         perks: 'Доступ бессрочный, обновления включены.'
     },
     cinematic: {
         name: '🎬 CINEMATIC PRICE',
-        description: 'Разговорные пролетки для вашего видеоконтента.',
+        description: 'Разговорные пролетки для видео',
         items: [
             {
-                title: '📦 Паки пролеток',
+                title: '**Паки пролеток:**',
                 lines: [
-                    '10 пролеток (без расстановки) — **1200 ₽**',
-                    '5 пролеток (с расстановкой) — **1400 ₽**'
+                    '10 пролеток (без расстановки) - **1000₽**',
+                    '5 пролеток (с расстановкой) - **1200₽**'
                 ]
             },
             {
-                title: '🎯 Поштучно',
+                title: '**поштучно:**',
                 lines: [
-                    '1 пролетка (без расстановки) — **150 ₽**',
-                    '1 пролетка (с расстановкой) — **350 ₽**'
+                    '1 пролетка (без расстановки) - **100₽**',
+                    '1 пролетка (с расстановкой) - **300₽**'
                 ]
             },
             {
-                title: '🎨 Редукс',
+                title: '**Редукс**',
                 lines: [
-                    'Отснять редукс (без монтажа) — **2500 ₽**',
-                    'Отснять редукс (с монтажом) — **3500 ₽**'
+                    'отснять редукс (без монтажа) - **2000₽**',
+                    'отснять редукс (с монтажом) - **4000₽**'
                 ]
             },
             {
-                title: '🖼️ Скрины',
+                title: '**Скрины:**',
                 lines: [
-                    '1 скрин на превью — **100 ₽**',
-                    'Сохранить вашего персонажа для будущих пролеток — **50 ₽**'
+                    '1 скрин на превью - **100 ₽**',
+                    'сохранить вашего персонажа для будущих пролеток - **50 ₽**'
                 ]
             }
         ],
-        orderInfo: `Для оформления заказа откройте тикет в ${supportChannelMention}.`
+        orderInfo: `Для заказа - ${supportChannelMention}`
     },
     nitro: {
         name: '⚡ DISCORD NITRO',
@@ -153,13 +151,14 @@ function createPrivateEmbed() {
 function createCinematicEmbed() {
     const embed = buildEmbedBase()
         .setTitle(products.cinematic.name)
-        .setDescription(products.cinematic.description);
+        .setDescription(`*${products.cinematic.description}*`);
 
     products.cinematic.items.forEach(item => {
-        embed.addFields({ name: item.title, value: item.lines.join('\n'), inline: false });
+        const formattedValue = item.lines.join('\n');
+        embed.addFields({ name: item.title, value: formattedValue, inline: false });
     });
 
-    embed.addFields({ name: '🛒 Как заказать', value: products.cinematic.orderInfo });
+    embed.addFields({ name: '\u200b', value: products.cinematic.orderInfo });
 
     return embed;
 }
