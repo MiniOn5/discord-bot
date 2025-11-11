@@ -1,327 +1,393 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, AttachmentBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
-const fs = require('fs');
+const {
+    Client,
+    GatewayIntentBits,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    EmbedBuilder,
+    Events
+} = require('discord.js');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.DirectMessages
+        GatewayIntentBits.MessageContent
     ]
 });
 
 const token = process.env.DISCORD_TOKEN;
-const NOTIFICATION_CHANNEL_ID = "1431415872395677706";
-const MEDIA_CHANNEL_ID = "1431415482204033094";
-const NOTIFICATION_ROLE_ID = "1431416078310834206";
 
-let subscriptions = {};
-const subsFile = './subs.json';
-let isInitialized = false; // Флаг чтобы предотвратить дублирование
-
-if (fs.existsSync(subsFile)) {
-    subscriptions = JSON.parse(fs.readFileSync(subsFile));
+if (!token) {
+    console.error('DISCORD_TOKEN отсутствует в .env. Добавьте токен и перезапустите бота.');
+    process.exit(1);
 }
 
-function saveSubs() {
-    fs.writeFileSync(subsFile, JSON.stringify(subscriptions, null, 2));
-}
+const STORE_CHANNELS = {
+    PRIVATE: '1437832849339449394',
+    CINEMATIC: '1437845275132825620',
+    NITRO: '1437845932564807720'
+};
 
-// Функция для создания embed с картинкой
-function createNotificationEmbed() {
-    const embed = new EmbedBuilder()
-        .setColor(0x0099FF)
-        .setTitle('🔔 Система уведомлений Freak Mods')
-        .setDescription('**Не пропустите важные объявления и события!**\n\nПодпишитесь на уведомления, чтобы получать важные сообщения прямо в личные сообщения.')
-        .addFields(
-            { name: '📬 Что вы получите:', value: '• Важные объявления\n• Новости проекта\n• Эксклюзивные события\n• Срочные уведомления' },
-            { name: '⚡ Как это работает:', value: 'Используйте кнопки ниже для управления подпиской' }
-        )
-        .setImage('attachment://freak_mods.png')
-        .setFooter({ text: 'Freak Mods • Ваш надежный компаньон', iconURL: 'https://i.imgur.com/xV6e6aM.png' })
-        .setTimestamp();
+const CONTACT_USER_ID = process.env.SALES_CONTACT_ID || '1196161068779700296';
+const CONTACT_USER_TAG = process.env.SALES_CONTACT_TAG || '@minion_freak';
+const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID || null;
+const BRAND_BANNER_URL = process.env.BRAND_BANNER_URL || 'https://i.imgur.com/xV6e6aM.png';
+const BRAND_FOOTER_TEXT = process.env.BRAND_FOOTER_TEXT || 'Freak Mods • Надежный поставщик';
+const BRAND_ICON_URL = process.env.BRAND_FOOTER_ICON_URL || BRAND_BANNER_URL;
+const PRIVATE_PREVIEW_URL = process.env.PRIVATE_PREVIEW_URL || null;
 
-    return embed;
-}
+const contactMention = CONTACT_USER_ID ? `<@${CONTACT_USER_ID}>` : CONTACT_USER_TAG;
+const supportChannelMention = SUPPORT_CHANNEL_ID ? `<#${SUPPORT_CHANNEL_ID}>` : 'канале «『💳』тикет-для-заказов»';
+const previewText = PRIVATE_PREVIEW_URL ? `[Открыть превью](${PRIVATE_PREVIEW_URL})` : 'Ссылка появится после настройки';
 
-// Функция для создания embed медиа-канала
-function createMediaEmbed() {
-    const embed = new EmbedBuilder()
-        .setColor(0xFF6B35)
-        .setTitle('📢 Панель управления рассылкой')
-        .setDescription('**Отправка массовых уведомлений подписчикам**\n\nИспользуйте эту панель для отправки важных сообщений всем подписчикам уведомлений.')
-        .addFields(
-            { name: '📤 Как отправить:', value: '1. Нажмите кнопку "Отправить рассылку"\n2. Отправьте сообщение в этот канал\n3. Бот перешлет его всем подписчикам' },
-            { name: '⚠️ Внимание:', value: 'Эта функция доступна только медиа-команде' }
-        )
-        .setFooter({ text: 'Freak Mods • Система рассылки', iconURL: 'https://i.imgur.com/xV6e6aM.png' })
-        .setTimestamp();
-
-    return embed;
-}
-
-client.once(Events.ClientReady, () => {
-    console.log(`Бот онлайн: ${client.user.tag}`);
-    
-    if (isInitialized) {
-        console.log('Бот уже инициализирован, пропускаем создание сообщений');
-        return;
+const products = {
+    private: {
+        name: '🎮 ПРИВАТНЫЙ КАНАЛ',
+        description: 'Эксклюзивный доступ к приватному каналу Freak Mods с регулярными обновлениями контента.',
+        features: [
+            '✅ 50+ ганпаков',
+            '✅ 30+ редуксов',
+            '✅ 20+ уникальных сборок',
+            '✅ Ежедневные обновления и техническая поддержка',
+            `✅ Превью: ${previewText}`
+        ],
+        price: '999 ₽',
+        perks: 'Доступ бессрочный, обновления включены.'
+    },
+    cinematic: {
+        name: '🎬 CINEMATIC PRICE',
+        description: 'Разговорные пролетки для вашего видеоконтента.',
+        items: [
+            {
+                title: '📦 Паки пролеток',
+                lines: [
+                    '10 пролеток (без расстановки) — **1200 ₽**',
+                    '5 пролеток (с расстановкой) — **1400 ₽**'
+                ]
+            },
+            {
+                title: '🎯 Поштучно',
+                lines: [
+                    '1 пролетка (без расстановки) — **150 ₽**',
+                    '1 пролетка (с расстановкой) — **350 ₽**'
+                ]
+            },
+            {
+                title: '🎨 Редукс',
+                lines: [
+                    'Отснять редукс (без монтажа) — **2500 ₽**',
+                    'Отснять редукс (с монтажом) — **3500 ₽**'
+                ]
+            },
+            {
+                title: '🖼️ Скрины',
+                lines: [
+                    '1 скрин на превью — **100 ₽**',
+                    'Сохранить вашего персонажа для будущих пролеток — **50 ₽**'
+                ]
+            }
+        ],
+        orderInfo: `Для оформления заказа откройте тикет в ${supportChannelMention}.`
+    },
+    nitro: {
+        name: '⚡ DISCORD NITRO',
+        description: 'Выберите удобный тариф и получите ключ сразу после оплаты.',
+        plans: {
+            basic: {
+                label: 'Nitro Basic',
+                prices: {
+                    '1 месяц': '300 ₽',
+                    '3 месяца': '800 ₽',
+                    '6 месяцев': '1500 ₽',
+                    '1 год': '2800 ₽'
+                }
+            },
+            full: {
+                label: 'Nitro Full',
+                prices: {
+                    '1 месяц': '500 ₽',
+                    '3 месяца': '1200 ₽',
+                    '6 месяцев': '2200 ₽',
+                    '1 год': '4000 ₽',
+                    'Апгрейд с Basic до Full': '200 ₽'
+                }
+            }
+        }
     }
-    
-    isInitialized = true;
-    
-    // Автоматически создаем сообщения в каналах при запуске
-    setTimeout(async () => {
-        try {
-            const notificationChannel = await client.channels.fetch(NOTIFICATION_CHANNEL_ID);
-            const mediaChannel = await client.channels.fetch(MEDIA_CHANNEL_ID);
-            
-            // Проверяем есть ли уже сообщения от бота
-            const notificationMessages = await notificationChannel.messages.fetch({ limit: 5 });
-            const existingNotification = notificationMessages.find(msg => 
-                msg.author.id === client.user.id && 
-                msg.embeds.length > 0
-            );
-            
-            const mediaMessages = await mediaChannel.messages.fetch({ limit: 5 });
-            const existingMedia = mediaMessages.find(msg => 
-                msg.author.id === client.user.id && 
-                msg.embeds.length > 0
-            );
-            
-            // Если сообщения уже есть - не создаем новые
-            if (existingNotification && existingMedia) {
-                console.log('Сообщения уже существуют, пропускаем создание');
+};
+
+function buildEmbedBase() {
+    return new EmbedBuilder()
+        .setColor(0xffb347)
+        .setFooter({ text: BRAND_FOOTER_TEXT, iconURL: BRAND_ICON_URL })
+        .setImage(BRAND_BANNER_URL)
+        .setTimestamp();
+}
+
+function createPrivateEmbed() {
+    return buildEmbedBase()
+        .setColor(0x0099ff)
+        .setTitle(products.private.name)
+        .setDescription(products.private.description)
+        .addFields(
+            { name: '📦 Что входит', value: products.private.features.join('\n') },
+            { name: '💰 Стоимость', value: `**${products.private.price}**`, inline: true },
+            { name: '♾️ Срок доступа', value: products.private.perks, inline: true },
+            { name: '🛒 Как заказать', value: `Нажмите кнопку ниже, бот подскажет, что делать.` }
+        );
+}
+
+function createCinematicEmbed() {
+    const embed = buildEmbedBase()
+        .setColor(0xff6b35)
+        .setTitle(products.cinematic.name)
+        .setDescription(products.cinematic.description);
+
+    products.cinematic.items.forEach(item => {
+        embed.addFields({ name: item.title, value: item.lines.join('\n'), inline: false });
+    });
+
+    embed.addFields({ name: '🛒 Как заказать', value: products.cinematic.orderInfo });
+
+    return embed;
+}
+
+function createNitroEmbed() {
+    const basicValues = Object.entries(products.nitro.plans.basic.prices)
+        .map(([period, price]) => `• **${period}** — ${price}`)
+        .join('\n');
+
+    const fullValues = Object.entries(products.nitro.plans.full.prices)
+        .map(([period, price]) => `• **${period}** — ${price}`)
+        .join('\n');
+
+    return buildEmbedBase()
+        .setColor(0x5865f2)
+        .setTitle(products.nitro.name)
+        .setDescription(products.nitro.description)
+        .addFields(
+            { name: products.nitro.plans.basic.label, value: basicValues, inline: true },
+            { name: products.nitro.plans.full.label, value: fullValues, inline: true },
+            { name: '🛒 Как заказать', value: `Выберите вариант при помощи кнопок ниже. Бот подскажет дальнейшие шаги.` }
+        );
+}
+
+async function ensureChannelContent(channelId, payloadBuilder) {
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel?.isTextBased()) {
+            console.warn(`Канал ${channelId} недоступен или не является текстовым.`);
                 return;
             }
             
-            // Очищаем только если нужно создать новые
-            if (existingNotification) {
-                await existingNotification.delete();
+        const recentMessages = await channel.messages.fetch({ limit: 10 });
+        const botMessages = recentMessages.filter(msg => msg.author.id === client.user.id);
+
+        for (const [, message] of botMessages) {
+            if (message.deletable) {
+                await message.delete().catch(() => undefined);
             }
-            if (existingMedia) {
-                await existingMedia.delete();
-            }
-            
-            // Создаем сообщение в канале уведомлений с двумя кнопками
-            const notificationRow = new ActionRowBuilder()
-                .addComponents(
+        }
+
+        const payload = typeof payloadBuilder === 'function' ? payloadBuilder() : payloadBuilder;
+        await channel.send(payload);
+        console.log(`Сообщение магазина обновлено в канале ${channelId}`);
+    } catch (error) {
+        console.error(`Не удалось обновить канал ${channelId}:`, error);
+    }
+}
+
+function buildPrivateMessage() {
+    const buttons = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
-                        .setCustomId('subscribe')
-                        .setLabel('✅ Подписаться')
+            .setCustomId('order_private')
+            .setLabel('🛒 Купить приватный канал')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
-                        .setCustomId('unsubscribe')
-                        .setLabel('❌ Отписаться')
-                        .setStyle(ButtonStyle.Danger)
-                );
-            
-            const image = new AttachmentBuilder('./freak_mods.png');
-            await notificationChannel.send({
-                embeds: [createNotificationEmbed()],
-                files: [image],
-                components: [notificationRow]
-            });
-            
-            // Создаем сообщение в медиа-канале
-            const mediaRow = new ActionRowBuilder()
-                .addComponents(
+            .setCustomId('ask_private')
+            .setLabel('❓ Вопросы по доступу')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return {
+        embeds: [createPrivateEmbed()],
+        components: [buttons]
+    };
+}
+
+function buildCinematicMessage() {
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('order_cinematic_pack')
+            .setLabel('🎬 Заказать пак')
+            .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
-                        .setCustomId('send_broadcast')
-                        .setLabel('📤 Отправить рассылку')
-                        .setStyle(ButtonStyle.Danger)
-                );
-            
-            await mediaChannel.send({
-                embeds: [createMediaEmbed()],
-                components: [mediaRow]
-            });
-            
-            console.log('Сообщения успешно созданы в каналах!');
-            
-        } catch (error) {
-            console.log('Ошибка при создании сообщений:', error);
-        }
-    }, 5000);
+            .setCustomId('order_cinematic_single')
+            .setLabel('🎯 Заказать штучно')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return {
+        embeds: [createCinematicEmbed()],
+        components: [buttons]
+    };
+}
+
+function buildNitroMessage() {
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('order_nitro_basic')
+            .setLabel('⚡ Nitro Basic')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('order_nitro_full')
+            .setLabel('🎁 Nitro Full')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId('order_nitro_upgrade')
+            .setLabel('⬆️ Апгрейд Basic → Full')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    return {
+        embeds: [createNitroEmbed()],
+        components: [buttons]
+    };
+}
+
+client.once(Events.ClientReady, async () => {
+    console.log(`Магазин Freak Mods запущен как ${client.user.tag}`);
+
+    await ensureChannelContent(STORE_CHANNELS.PRIVATE, buildPrivateMessage);
+    await ensureChannelContent(STORE_CHANNELS.CINEMATIC, buildCinematicMessage);
+    await ensureChannelContent(STORE_CHANNELS.NITRO, buildNitroMessage);
 });
 
-// Обработка взаимодействий с кнопками
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isButton()) return;
 
-    try {
-        const userId = interaction.user.id;
-        const member = interaction.member;
-        const hasRole = member && member.roles.cache.has(NOTIFICATION_ROLE_ID);
-        const isSubscribed = subscriptions[userId];
+    const replyOptions = {
+        ephemeral: true
+    };
 
-        if (interaction.customId === 'subscribe') {
-            // Подписка
-            if (hasRole || isSubscribed) {
-                await interaction.reply({ 
-                    content: '❌ Вы уже подписаны на рассылку!', 
-                    ephemeral: true 
+    try {
+        switch (interaction.customId) {
+            case 'order_private':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '🎮 **Заказ приватного канала**',
+                        '',
+                        `1. Подготовьте способ оплаты.`,
+                        `2. Напишите ${contactMention} или откройте тикет в ${supportChannelMention}.`,
+                        '3. Укажите свой Discord тег и желаемый способ оплаты.',
+                        '',
+                        'После подтверждения оплаты вы получите постоянный доступ в приват.'
+                    ].join('\n')
                 });
-            } else {
-                // Подписываемся
-                subscriptions[userId] = true;
-                if (member && NOTIFICATION_ROLE_ID) {
-                    try {
-                        await member.roles.add(NOTIFICATION_ROLE_ID);
-                    } catch (error) {
-                        console.log('Ошибка при выдаче роли:', error);
-                    }
-                }
-                saveSubs();
-                
-                await interaction.reply({ 
-                    content: '✅ Вы успешно подписались на уведомления! Теперь вы будете получать важные сообщения в ЛС.', 
-                    ephemeral: true 
+
+            case 'ask_private':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '❓ **Вопросы по приватному каналу**',
+                        '',
+                        `Задайте любой вопрос ${contactMention} или через тикет ${supportChannelMention}.`,
+                        'Мы расскажем об обновлениях, содержимом и поможем выбрать тариф.'
+                    ].join('\n')
                 });
-            }
-        }
-        
-        if (interaction.customId === 'unsubscribe') {
-            // Отписка
-            if (!hasRole && !isSubscribed) {
-                await interaction.reply({ 
-                    content: '❌ Вы не подписаны на рассылку!', 
-                    ephemeral: true 
+
+            case 'order_cinematic_pack':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '🎬 **Пакет пролеток**',
+                        '',
+                        'Укажите при заказе:',
+                        '• Нужный пак (10 без расстановки / 5 с расстановкой)',
+                        '• Пожелания по стилю и времени',
+                        `• Свой контакт для обратной связи (${contactMention})`,
+                        '',
+                        `Откройте тикет в ${supportChannelMention} и приложите референсы, если они есть.`
+                    ].join('\n')
                 });
-            } else {
-                // Отписываемся
-                delete subscriptions[userId];
-                if (member && NOTIFICATION_ROLE_ID) {
-                    try {
-                        await member.roles.remove(NOTIFICATION_ROLE_ID);
-                    } catch (error) {
-                        console.log('Ошибка при удалении роли:', error);
-                    }
-                }
-                saveSubs();
-                
-                await interaction.reply({ 
-                    content: '✅ Вы отписались от уведомлений.', 
-                    ephemeral: true 
+
+            case 'order_cinematic_single':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '🎯 **Поштучные пролетки и услуги**',
+                        '',
+                        'Цены:',
+                        '• 1 пролетка без расстановки — 150 ₽',
+                        '• 1 пролетка с расстановкой — 350 ₽',
+                        '• Отснять редукс без монтажа — 2500 ₽',
+                        '• Отснять редукс с монтажом — 3500 ₽',
+                        '• 1 скрин на превью — 100 ₽',
+                        '• Сохранить персонажа — 50 ₽',
+                        '',
+                        `Оформление через тикет в ${supportChannelMention}.`
+                    ].join('\n')
                 });
-            }
-        }
-        
-        if (interaction.customId === 'send_broadcast') {
-            // Проверяем права пользователя
-            if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-                return await interaction.reply({ 
-                    content: '❌ Эта функция доступна только для медиа-команды!', 
-                    ephemeral: true 
+
+            case 'order_nitro_basic':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '⚡ **Nitro Basic**',
+                        '',
+                        'Доступные сроки:',
+                        '• 1 месяц — 300 ₽',
+                        '• 3 месяца — 800 ₽',
+                        '• 6 месяцев — 1500 ₽',
+                        '• 1 год — 2800 ₽',
+                        '',
+                        `Напишите ${contactMention} или создайте тикет в ${supportChannelMention}, чтобы получить ключ сразу после оплаты.`
+                    ].join('\n')
                 });
-            }
-            
-            await interaction.reply({ 
-                content: '📝 Теперь отправьте сообщение в этот канал (текст или с изображением), и оно будет разослано всем подписчикам.', 
-                ephemeral: true 
-            });
+
+            case 'order_nitro_full':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '🎁 **Nitro Full**',
+                        '',
+                        'Доступные сроки:',
+                        '• 1 месяц — 500 ₽',
+                        '• 3 месяца — 1200 ₽',
+                        '• 6 месяцев — 2200 ₽',
+                        '• 1 год — 4000 ₽',
+                        '',
+                        `Для покупки свяжитесь с ${contactMention} или через ${supportChannelMention}.`
+                    ].join('\n')
+                });
+
+            case 'order_nitro_upgrade':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '⬆️ **Апгрейд Nitro Basic → Nitro Full**',
+                        '',
+                        'Стоимость апгрейда — 200 ₽.',
+                        '',
+                        `Откройте тикет в ${supportChannelMention} и укажите данные текущей подписки.`,
+                        `Также можете написать напрямую ${contactMention}.`
+                    ].join('\n')
+                });
+
+            default:
+                return interaction.reply({ ...replyOptions, content: 'Команда не распознана. Попробуйте еще раз.' });
         }
     } catch (error) {
-        // ИГНОРИРУЕМ ошибку "Unknown interaction" - это нормально при перезапусках
-        if (error.code === 10062) {
-            console.log('Игнорируем устаревшее взаимодействие');
-            return;
+        if (!interaction.replied) {
+            await interaction.reply({
+                ...replyOptions,
+                content: 'Произошла ошибка при обработке запроса. Попробуйте снова или обратитесь к администрации.'
+            }).catch(() => undefined);
         }
-        console.log('Ошибка при обработке взаимодействия:', error);
-    }
-});
-
-// Обработка сообщений в медиа-канале для рассылки
-let lastBroadcastTime = 0; // Защита от дублирования рассылок
-
-client.on(Events.MessageCreate, async message => {
-    // Рассылка уведомлений подписчикам
-    if (message.channel.id === MEDIA_CHANNEL_ID && !message.author.bot) {
-        // Проверяем, имеет ли пользователь права администратора
-        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return; // Не админ - игнорируем
-        }
-        
-        // Защита от дублирования - не чаще чем раз в 10 секунд
-        const now = Date.now();
-        if (now - lastBroadcastTime < 10000) {
-            console.log('Защита от дублирования - пропускаем рассылку');
-            return;
-        }
-        lastBroadcastTime = now;
-        
-        // Получаем предыдущее сообщение бота с кнопкой
-        const messages = await message.channel.messages.fetch({ limit: 5 });
-        const botMessage = messages.find(msg => 
-            msg.author.id === client.user.id && 
-            msg.components.length > 0
-        );
-        
-        if (botMessage && message.createdTimestamp > botMessage.createdTimestamp) {
-            // Это ответ на запрос рассылки
-            
-            // НАЙДИ ВСЕХ УЧАСТНИКОВ С РОЛЬЮ
-            const guild = message.guild;
-            let membersWithRole = [];
-            
-            try {
-                // Получаем всех участников с ролью уведомлений
-                membersWithRole = await guild.members.fetch();
-                membersWithRole = membersWithRole.filter(member => 
-                    member.roles.cache.has(NOTIFICATION_ROLE_ID) && !member.user.bot
-                );
-                console.log(`Найдено ${membersWithRole.size} пользователей с ролью уведомлений`);
-            } catch (error) {
-                console.log('Ошибка при получении участников:', error);
-                return;
-            }
-            
-            let successCount = 0;
-            let failCount = 0;
-            
-            // Создаем embed для рассылки
-            const broadcastEmbed = new EmbedBuilder()
-                .setColor(0x0099FF)
-                .setTitle('📢 Важное уведомление от Freak Mods')
-                .setDescription(message.content || '')
-                .setFooter({ text: 'Freak Mods • Система уведомлений', iconURL: 'https://i.imgur.com/xV6e6aM.png' })
-                .setTimestamp();
-            
-            // Добавляем изображение если есть
-            if (message.attachments.size > 0) {
-                broadcastEmbed.setImage(message.attachments.first().url);
-            }
-            
-            // Рассылаем ВСЕМ с ролью
-            for (const member of membersWithRole.values()) {
-                try {
-                    const user = await client.users.fetch(member.id);
-                    await user.send({ embeds: [broadcastEmbed] });
-                    successCount++;
-                    console.log(`Успешно отправлено пользователю: ${member.user.tag}`);
-                } catch (err) {
-                    console.log(`Не удалось отправить сообщение ${member.user.tag}: ${err}`);
-                    failCount++;
-                }
-            }
-            
-            // Отправляем отчет о рассылке
-            const reportEmbed = new EmbedBuilder()
-                .setColor(successCount > 0 ? 0x00FF00 : 0xFF0000)
-                .setTitle('📊 Отчет о рассылке')
-                .setDescription(`Рассылка завершена!`)
-                .addFields(
-                    { name: '✅ Успешно:', value: `${successCount} пользователей`, inline: true },
-                    { name: '❌ Ошибки:', value: `${failCount} пользователей`, inline: true },
-                    { name: '👥 Всего с ролью:', value: `${membersWithRole.size} пользователей`, inline: true }
-                )
-                .setTimestamp();
-            
-            await message.reply({ embeds: [reportEmbed] });
-            console.log(`Рассылка завершена: ${successCount}/${membersWithRole.size} успешно`);
-        }
+        console.error('Ошибка при обработке взаимодействия:', error);
     }
 });
 
