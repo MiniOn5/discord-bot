@@ -32,8 +32,15 @@ const STORE_CHANNELS = {
 
 const CONTACT_USER_ID = process.env.SALES_CONTACT_ID || '1196161068779700296';
 const CONTACT_USER_TAG = process.env.SALES_CONTACT_TAG || '@minion_freak';
-const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID || null;
-const BRAND_BANNER_URL = process.env.BRAND_BANNER_URL || 'https://i.imgur.com/xV6e6aM.png';
+const SUPPORT_CHANNEL_ID = process.env.SUPPORT_CHANNEL_ID || '1348808164904272025';
+const BRAND_PRIMARY_COLOR = (() => {
+    const raw = process.env.BRAND_COLOR || '2b2d31'; // нейтральный серо-графитовый по умолчанию
+    const hex = raw.replace('#', '');
+    const parsed = Number.parseInt(hex, 16);
+    return Number.isNaN(parsed) ? 0x2b2d31 : parsed;
+})();
+
+const BRAND_BANNER_URL = process.env.BRAND_BANNER_URL || 'https://i.imgur.com/neFpsVm.jpg';
 const BRAND_FOOTER_TEXT = process.env.BRAND_FOOTER_TEXT || 'Freak Mods • Надежный поставщик';
 const BRAND_ICON_URL = process.env.BRAND_FOOTER_ICON_URL || BRAND_BANNER_URL;
 const PRIVATE_PREVIEW_URL = process.env.PRIVATE_PREVIEW_URL || null;
@@ -119,16 +126,20 @@ const products = {
 };
 
 function buildEmbedBase() {
-    return new EmbedBuilder()
-        .setColor(0xffb347)
+    const base = new EmbedBuilder()
+        .setColor(BRAND_PRIMARY_COLOR)
         .setFooter({ text: BRAND_FOOTER_TEXT, iconURL: BRAND_ICON_URL })
-        .setImage(BRAND_BANNER_URL)
         .setTimestamp();
+
+    if (BRAND_BANNER_URL) {
+        base.setImage(BRAND_BANNER_URL);
+    }
+
+    return base;
 }
 
 function createPrivateEmbed() {
     return buildEmbedBase()
-        .setColor(0x0099ff)
         .setTitle(products.private.name)
         .setDescription(products.private.description)
         .addFields(
@@ -141,7 +152,6 @@ function createPrivateEmbed() {
 
 function createCinematicEmbed() {
     const embed = buildEmbedBase()
-        .setColor(0xff6b35)
         .setTitle(products.cinematic.name)
         .setDescription(products.cinematic.description);
 
@@ -164,7 +174,6 @@ function createNitroEmbed() {
         .join('\n');
 
     return buildEmbedBase()
-        .setColor(0x5865f2)
         .setTitle(products.nitro.name)
         .setDescription(products.nitro.description)
         .addFields(
@@ -179,9 +188,9 @@ let isInitialized = false;
 const lastUpdateTime = {};
 
 async function ensureChannelContent(channelId, payloadBuilder) {
-    // Защита от частых обновлений - не чаще раза в минуту
+    // Защита от частых обновлений - не чаще раза в 5 минут
     const now = Date.now();
-    if (lastUpdateTime[channelId] && (now - lastUpdateTime[channelId]) < 60000) {
+    if (lastUpdateTime[channelId] && (now - lastUpdateTime[channelId]) < 300000) {
         console.log(`Пропускаем обновление канала ${channelId} - слишком часто`);
         return;
     }
@@ -200,14 +209,27 @@ async function ensureChannelContent(channelId, payloadBuilder) {
             msg.components.length > 0
         );
 
-        // Проверяем, есть ли уже актуальное сообщение с кнопками
-        if (botMessages.size > 0 && isInitialized) {
-            console.log(`Канал ${channelId} уже содержит актуальное сообщение, пропускаем обновление`);
-            return;
+        // Если уже есть актуальное сообщение с кнопками - НЕ ТРОГАЕМ ЕГО
+        if (botMessages.size > 0) {
+            // Проверяем возраст самого свежего сообщения
+            const newestMessage = botMessages.first();
+            const messageAge = now - newestMessage.createdTimestamp;
+            
+            // Если сообщение свежее 10 минут - не трогаем
+            if (messageAge < 600000) {
+                console.log(`Канал ${channelId} содержит свежее сообщение (${Math.round(messageAge / 1000)}с назад), пропускаем обновление`);
+                return;
+            }
+            
+            // Если инициализация уже прошла и есть сообщение - не трогаем
+            if (isInitialized) {
+                console.log(`Канал ${channelId} уже содержит актуальное сообщение, пропускаем обновление`);
+                return;
+            }
         }
 
-        // Удаляем старые сообщения только если их больше одного или если это первая инициализация
-        if (botMessages.size > 0) {
+        // Удаляем старые сообщения только при первой инициализации
+        if (botMessages.size > 0 && !isInitialized) {
             for (const [, message] of botMessages) {
                 if (message.deletable) {
                     await message.delete().catch(() => undefined);
