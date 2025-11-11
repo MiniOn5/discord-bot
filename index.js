@@ -174,25 +174,50 @@ function createNitroEmbed() {
         );
 }
 
+// Флаг для отслеживания инициализации
+let isInitialized = false;
+const lastUpdateTime = {};
+
 async function ensureChannelContent(channelId, payloadBuilder) {
+    // Защита от частых обновлений - не чаще раза в минуту
+    const now = Date.now();
+    if (lastUpdateTime[channelId] && (now - lastUpdateTime[channelId]) < 60000) {
+        console.log(`Пропускаем обновление канала ${channelId} - слишком часто`);
+        return;
+    }
+
     try {
         const channel = await client.channels.fetch(channelId);
         if (!channel?.isTextBased()) {
             console.warn(`Канал ${channelId} недоступен или не является текстовым.`);
-                return;
-            }
+            return;
+        }
             
         const recentMessages = await channel.messages.fetch({ limit: 10 });
-        const botMessages = recentMessages.filter(msg => msg.author.id === client.user.id);
+        const botMessages = recentMessages.filter(msg => 
+            msg.author.id === client.user.id && 
+            msg.components && 
+            msg.components.length > 0
+        );
 
-        for (const [, message] of botMessages) {
-            if (message.deletable) {
-                await message.delete().catch(() => undefined);
+        // Проверяем, есть ли уже актуальное сообщение с кнопками
+        if (botMessages.size > 0 && isInitialized) {
+            console.log(`Канал ${channelId} уже содержит актуальное сообщение, пропускаем обновление`);
+            return;
+        }
+
+        // Удаляем старые сообщения только если их больше одного или если это первая инициализация
+        if (botMessages.size > 0) {
+            for (const [, message] of botMessages) {
+                if (message.deletable) {
+                    await message.delete().catch(() => undefined);
+                }
             }
         }
 
         const payload = typeof payloadBuilder === 'function' ? payloadBuilder() : payloadBuilder;
         await channel.send(payload);
+        lastUpdateTime[channelId] = Date.now();
         console.log(`Сообщение магазина обновлено в канале ${channelId}`);
     } catch (error) {
         console.error(`Не удалось обновить канал ${channelId}:`, error);
@@ -263,6 +288,10 @@ client.once(Events.ClientReady, async () => {
     await ensureChannelContent(STORE_CHANNELS.PRIVATE, buildPrivateMessage);
     await ensureChannelContent(STORE_CHANNELS.CINEMATIC, buildCinematicMessage);
     await ensureChannelContent(STORE_CHANNELS.NITRO, buildNitroMessage);
+    
+    // Устанавливаем флаг после первой инициализации
+    isInitialized = true;
+    console.log('Инициализация магазина завершена');
 });
 
 client.on(Events.InteractionCreate, async interaction => {
