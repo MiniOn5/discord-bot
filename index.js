@@ -27,7 +27,8 @@ if (!token) {
 const STORE_CHANNELS = {
     PRIVATE: '1437832849339449394',
     CINEMATIC: '1437845275132825620',
-    NITRO: '1437845932564807720'
+    NITRO: '1437845932564807720',
+    PRICE_LIST: '1437900311753916579'
 };
 
 const CONTACT_USER_ID = process.env.SALES_CONTACT_ID || '1196161068779700296';
@@ -121,6 +122,60 @@ const products = {
                 }
             }
         }
+    },
+    priceList: {
+        name: 'PRICE LIST',
+        services: [
+            {
+                title: '**Sound/Optimization/Scope Weapon**',
+                description: 'Кастом звуки на Оружие/Оптимизация/Прицелы на оружие',
+                price: 'Цена от 200₽',
+                minPrice: 200
+            },
+            {
+                title: '**Minimap**',
+                description: 'Полная кастомизация по вашему Т.З.',
+                price: 'Цена от 300₽',
+                minPrice: 300
+            },
+            {
+                title: '**Other**',
+                description: 'Перенос замененок на оружие, Или звуков или вещей и т.д.',
+                price: 'Цена от 300₽',
+                minPrice: 300
+            },
+            {
+                title: '**GUN PACK**',
+                description: 'Перекрас ганпака\nЦена за 1 ган - 200 RUB\n\nПолная кастомизация гана/ганов**\nЦена за 1 ган - 400₽',
+                price: '',
+                minPrice: 200
+            },
+            {
+                title: '**Effects | Tracer / Timecycle**',
+                description: 'Создание эффектов попадания/Крови/Трассеров/Таймциклов',
+                price: 'Цена от 500₽',
+                minPrice: 500
+            },
+            {
+                title: '**ESC Map**',
+                description: 'Создание карты с вашим Лого/Цветом/Позициями/Зонами MCL и т.д.',
+                price: 'Цена от 800₽',
+                minPrice: 800
+            },
+            {
+                title: '**REDUX**',
+                description: 'Эффекты/Трассера/Кровь/Миникарта/Карта на ESC/Таймциклы и т.д.',
+                price: 'Цена от 1000₽',
+                minPrice: 1000
+            },
+            {
+                title: '**GUN GAME**',
+                description: 'Кастомизация GunGame\'a по вашему Т.З',
+                price: 'Цена от 1000₽',
+                minPrice: 1000
+            }
+        ],
+        orderInfo: `Для заказа - ${supportChannelMention}`
     }
 };
 
@@ -188,6 +243,30 @@ function createNitroEmbed() {
             { name: products.nitro.plans.full.label, value: fullValues, inline: true },
             { name: '🛒 Как заказать', value: `Выберите вариант при помощи кнопок ниже. Бот подскажет дальнейшие шаги.` }
         );
+}
+
+function createPriceListEmbed() {
+    const embed = buildEmbedBase()
+        .setTitle(products.priceList.name);
+
+    products.priceList.services.forEach(service => {
+        let value = service.description;
+        if (service.price) {
+            value += `\n\n${service.price}`;
+        }
+        embed.addFields({
+            name: service.title,
+            value: value,
+            inline: false
+        });
+    });
+
+    embed.addFields({
+        name: '\u200b',
+        value: products.priceList.orderInfo
+    });
+
+    return embed;
 }
 
 // Флаг для отслеживания инициализации
@@ -311,12 +390,27 @@ function buildNitroMessage() {
     };
 }
 
+function buildPriceListMessage() {
+    const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('order_price_list')
+            .setLabel('🛒 Заказать услугу')
+            .setStyle(ButtonStyle.Success)
+    );
+
+    return {
+        embeds: [createPriceListEmbed()],
+        components: [buttons]
+    };
+}
+
 client.once(Events.ClientReady, async () => {
     console.log(`Магазин Freak Mods запущен как ${client.user.tag}`);
 
     await ensureChannelContent(STORE_CHANNELS.PRIVATE, buildPrivateMessage);
     await ensureChannelContent(STORE_CHANNELS.CINEMATIC, buildCinematicMessage);
     await ensureChannelContent(STORE_CHANNELS.NITRO, buildNitroMessage);
+    await ensureChannelContent(STORE_CHANNELS.PRICE_LIST, buildPriceListMessage);
     
     // Устанавливаем флаг после первой инициализации
     isInitialized = true;
@@ -432,6 +526,22 @@ client.on(Events.InteractionCreate, async interaction => {
                         '',
                         `Откройте тикет в ${supportChannelMention} и укажите данные текущей подписки.`,
                         `Также можете написать напрямую ${contactMention}.`
+                    ].join('\n')
+                });
+
+            case 'order_price_list':
+                return interaction.reply({
+                    ...replyOptions,
+                    content: [
+                        '🛒 **Заказ услуги из прайс-листа**',
+                        '',
+                        'Укажите при заказе:',
+                        '• Нужную услугу из прайс-листа',
+                        '• Техническое задание (Т.З.)',
+                        '• Пожелания и требования',
+                        `• Свой контакт для обратной связи (${contactMention})`,
+                        '',
+                        `Откройте тикет в ${supportChannelMention} для оформления заказа.`
                     ].join('\n')
                 });
 
